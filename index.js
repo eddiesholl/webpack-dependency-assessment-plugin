@@ -34,15 +34,14 @@ class DependencyAssessmentPlugin {
         const output = this.formatGraph(graph)
         compilation.warnings.push(output)
         // console.dir(modules[100].resource)
-        
       })
     })
   }
 
-
   createGraphForModules(modules, plugin) {
     let cwd = this.options.cwd
     const direct = {}
+    const all = {}
 
     for (let module of modules) {
       const shouldSkipSubject = (
@@ -83,20 +82,21 @@ class DependencyAssessmentPlugin {
 
         let subjectPath = path.relative(cwd, module.resource)
         let subDepPath = path.relative(cwd, depModule.resource)
-        let directDepItem = direct[subDepPath]
+        let importName = dependency.name ? `${subDepPath} -> ${dependency.name}` : subDepPath
+        let directDepItem = direct[importName]
         if (directDepItem) {
           if (!directDepItem.includes(subjectPath)) {
             directDepItem.push(subjectPath)
           }
         } else {
-          direct[subDepPath] = [subjectPath]
+          direct[importName] = [subjectPath]
         }
       }
-
     }
 
     return {
-      direct
+      direct,
+      all
     }
   }
 
