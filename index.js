@@ -9,6 +9,7 @@ class DependencyAssessmentPlugin {
       exclude: new RegExp('$^'),
       include: new RegExp('.*'),
       subject: new RegExp('$^'),
+      includeNamedImports: false,
       failOnError: false,
       allowAsyncCycles: false,
       onDetected: false,
@@ -18,7 +19,6 @@ class DependencyAssessmentPlugin {
 
   apply(compiler) {
     let plugin = this
-    let cwd = this.options.cwd
 
     compiler.hooks.compilation.tap(PluginTitle, (compilation) => {
       compilation.hooks.optimizeModules.tap(PluginTitle, (modules) => {
@@ -40,18 +40,18 @@ class DependencyAssessmentPlugin {
     const direct = {}
     const all = {}
 
-    for (let module of modules) {
+    for (let subject of modules) {
       const shouldSkipSubject = (
-        module.resource == null ||
-        !plugin.options.subject.test(module.resource)
+        subject.resource == null ||
+        !plugin.options.subject.test(subject.resource)
       )
-      // skip the module if it matches the exclude pattern
+      // skip the subject if it matches the exclude pattern
       if (shouldSkipSubject) {
         continue
       }
 
       // Iterate over the current modules dependencies
-      for (let dependency of module.dependencies) {
+      for (let dependency of subject.dependencies) {
         if (
           dependency.constructor &&
           dependency.constructor.name === 'CommonJsSelfReferenceDependency'
@@ -67,19 +67,25 @@ class DependencyAssessmentPlugin {
         if (!depModule.resource) { continue }
 
         const shouldSkipTarget = (
-          module.resource == null ||
+          subject.resource == null ||
           plugin.options.exclude.test(depModule.resource) ||
           !plugin.options.include.test(depModule.resource) ||
           plugin.options.subject.test(depModule.resource)
         )
-        // skip the module if it matches the exclude pattern
+        // skip the target if it matches the exclude pattern
         if (shouldSkipTarget) {
           continue
         }
 
-        let subjectPath = path.relative(cwd, module.resource)
+        if (plugin.options.includeNamedImports && !dependency.name) {
+          continue
+        }
+
+        let subjectPath = path.relative(cwd, subject.resource)
         let subDepPath = path.relative(cwd, depModule.resource)
-        let importName = dependency.name ? `${subDepPath} -> ${dependency.name}` : subDepPath
+        let importName = plugin.options.includeNamedImports && dependency.name
+          ? `${subDepPath} -> ${dependency.name}`
+          : subDepPath
         let directDepItem = direct[importName]
         if (directDepItem) {
           if (!directDepItem.includes(subjectPath)) {
