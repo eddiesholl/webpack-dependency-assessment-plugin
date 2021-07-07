@@ -1,5 +1,6 @@
 let path = require('path')
 let extend = require('util')._extend
+let chalk = require("chalk")
 let BASE_ERROR = 'Circular dependency detected:\r\n'
 let PluginTitle = 'DependencyAssessmentPlugin'
 
@@ -29,49 +30,11 @@ class DependencyAssessmentPlugin {
         compilation.getLogger(PluginTitle).info('hello compilation')
 
         const graph = this.createGraphForModules(modules, plugin)
+        // this.outputGraph(graph, compilation)
         const output = this.formatGraph(graph)
-        compilation.getLogger(PluginTitle).info(output)
+        compilation.warnings.push(output)
         // console.dir(modules[100].resource)
-        for (let module of modules) {
-          const shouldSkip = (
-            module.resource == null ||
-            plugin.options.exclude.test(module.resource) ||
-            !plugin.options.include.test(module.resource)
-          )
-          // skip the module if it matches the exclude pattern
-          if (shouldSkip) {
-            continue
-          }
-          compilation.getLogger(PluginTitle).log(module.resource)
-
-          let maybeCyclicalPathsList = this.isCyclic(module, module, {}, compilation)
-          if (maybeCyclicalPathsList) {
-            // allow consumers to override all behavior with onDetected
-            if (plugin.options.onDetected) {
-              try {
-                plugin.options.onDetected({
-                  module: module,
-                  paths: maybeCyclicalPathsList,
-                  compilation: compilation
-                })
-              } catch(err) {
-                compilation.errors.push(err)
-              }
-              continue
-            }
-
-            // mark warnings or errors on webpack compilation
-            let error = new Error(BASE_ERROR.concat(maybeCyclicalPathsList.join(' -> ')))
-            if (plugin.options.failOnError) {
-              compilation.errors.push(error)
-            } else {
-              compilation.warnings.push(error)
-            }
-          }
-        }
-        if (plugin.options.onEnd) {
-          plugin.options.onEnd({ compilation });
-        }
+        
       })
     })
   }
@@ -141,12 +104,22 @@ class DependencyAssessmentPlugin {
     const directLines = Object.keys(graph.direct)
       .sort()
       .map(k => {
-        const subjects = graph.direct[k].sort().map(d => ` - ${d}`).join('\n')
-        return `${k}\n${subjects}`
+        const subjects = graph.direct[k].sort().map(d => ` - ${chalk.white(d)}`).join('\n')
+        return `${chalk.green.bold(k)}\n${subjects}`
       })
       .join('\n')
 
-    return `Direct:\n${directLines}`
+    return `Direct dependencies:\n${directLines}`
+  }
+
+  outputGraph(graph, compilation) {
+    const out = compilation.warnings
+    Object.keys(graph.direct)
+      .sort()
+      .forEach(dep => {
+        out.push(dep)
+        graph.direct[dep].sort().map(d => out.push(` - ${d}`))
+      })
   }
 
   isCyclic(initialModule, currentModule, seenModules, compilation) {
